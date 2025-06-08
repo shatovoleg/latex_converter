@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    runtime: nvidia
+    ports:
+      - "20000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - app-network
+      - dwaiui_ai-network
+
+  frontend:
+    build: ./front
+    ports:
+      - "20001:8000"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+  dwaiui_ai-network:
+    external: true
+

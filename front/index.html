@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Оцифровка документации</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <img src="assets/tatneft.png" alt="Tatneft Logo" class="logo"/>
+        <h1>Оцифровка документации</h1>
+        <label class="file-input-label" for="pdf-upload">
+            <span id="file-label-text">Выберите PDF-файл</span>
+        </label>
+        <input id="pdf-upload" type="file" accept=".pdf"/>
+        <button id="convert-btn" disabled>Конвертировать в LaTeX</button>
+        <div id="status" class="status"></div>
+        <div id="error" class="error-message"></div>
+        <a id="download-link" class="download-link" style="display:none;" download="result.zip">Скачать LaTeX ZIP</a>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>

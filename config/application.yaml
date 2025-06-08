@@ -17,16 +17,16 @@ pipeline:
   stages:
     - name: MarkerPdfTextExtractor
       params:
-        use_llm: false
         output_format: "json"
         languages: "en,ru"
         force_ocr: true
+        format_lines: true
     - name: MarkerPdfTablesExtractor
       params:
-        use_llm: false
         output_format: "json"
         languages: "en,ru"
         force_ocr: true
+        format_lines: true
     - name: FormulasExtractor
       params:
         required_symbols: [ '\\', '{', '}', '_', '^' ]
@@ -34,7 +34,7 @@ pipeline:
         cache_dir: "cache/formulas"
     - name: AIExtractor
       params:
-        model: "o4-mini"
+        model:
         api_key:
         proxies:
           http:

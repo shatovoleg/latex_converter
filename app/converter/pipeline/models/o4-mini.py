@@ -1,9 +1,8 @@
 import io
 import json
 import os
-
-import requests
-from openai import OpenAI
+import httpx
+from openai import OpenAI, DefaultHttpxClient
 import base64
 
 from reportlab.lib.pagesizes import letter
@@ -15,9 +14,18 @@ from app.converter.utils.helpers import delete_latex_md
 
 class AIExtractor(Stage):
     def __init__(self, api_key: str, proxies: dict[str:str], model: str = "gpt-4o", text: str = "", tables: str = "",
-                 formulas: str = ""):
+                 formulas: str = "", base_url: str | None = None):
         key = os.path.expandvars(api_key)
-        self.client = OpenAI(api_key=key, http_client=requests.Session().proxies.update(proxies))
+        self.client = None
+        if proxies.get("http"):
+            print(proxies["http"])
+            self.client = OpenAI(api_key=key, http_client=DefaultHttpxClient(
+                proxy=proxies["http"],
+                transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+            ), base_url=base_url)
+        else:
+            print("no proxies")
+            self.client = OpenAI(api_key=key, base_url=base_url)
         self.model = model
         self.extracted_text_key = text
         self.extracted_tables_key = tables

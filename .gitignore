@@ -6,3 +6,7 @@ cache
 temp
 
 .env
+__pycache__
+
+pdf_docs
+pdf_docs_output
