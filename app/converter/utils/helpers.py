@@ -16,7 +16,7 @@ def get_file_name(file_path=""):
 
 
 def create_dir(dir_path):
-    os.makedirs(dir_path)
+    os.makedirs(dir_path, exist_ok=True)
 
 
 def enhance_image(image):

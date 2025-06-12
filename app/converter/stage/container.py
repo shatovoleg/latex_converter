@@ -6,7 +6,7 @@ CLASS_MAP = {
     'MarkerPdfTextExtractor': 'app.converter.pipeline.ocr.marker_pdf.text',
     'MarkerPdfTablesExtractor': 'app.converter.pipeline.ocr.marker_pdf.tables',
     'TesseractTablesExtractor': 'app.converter.pipeline.ocr.tesseract.tables',
-    'TesseractTextExtractor': 'app.converter.pipeline.ocr.tesseract.tables',
+    'TesseractTextExtractor': 'app.converter.pipeline.ocr.tesseract.text',
     'FormulasExtractor': 'app.converter.pipeline.ocr.formulas',
     'AIExtractor': 'app.converter.pipeline.models.o4-mini',
     'TexExporter': 'app.converter.pipeline.file.tex',
