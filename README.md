@@ -1,331 +1,74 @@
 # PDF → LaTeX Converter
 
-**Содержание**  
-1. [Обзор](#обзор)  
-2. [Структура проекта](#структура-проекта)  
-3. [Установка и зависимости](#установка-и-зависимости)  
-4. [Конфигурация](#конфигурация)  
-   - [Файл `config/application.yaml`](#файл-configapplicationyaml)  
-   - [Шаблоны prompt’ов (config/prompts)](#шаблоны-promptов-configprompts)  
-   - [Примеры настроек для разных стадий](#примеры-настроек-для-разных-стадий)  
-   - [Добавление собственных обработчиков](#добавление-собственных-обработчиков)  
-   - [Переменные окружения и файл `.env`](#переменные-окружения-и-файл-env)  
-5. [Архитектура и Pipeline](#архитектура-и-pipeline)  
-6. [API – FastAPI](#api--fastapi)  
-7. [Запуск и пример использования](#запуск-и-пример-использования)  
-8. [Очистка и временные файлы](#очистка-и-временные-файлы)  
-9. [Кеш и директория `cache/`](#кеш-и-директория-cache)  
-10. [Результирующий ZIP-архив](#результирующий-zip-архив)  
+Этот проект предоставляет сервис для преобразования PDF‑файлов в набор `.tex`‑страниц.
+Сервис разбивает документ на страницы, выполняет OCR (текст, таблицы, формулы) и при необходимости использует модель OpenAI для генерации чистого LaTeX.
 
----
+## Состав репозитория
+- `app/` – код FastAPI и логика конвертации
+- `config/` – `application.yaml` и шаблоны `prompts`
+- `front/` – минимальный веб‑клиент
+- `process_pdf.py` – утилита для пакетной обработки
+- `downloads/`, `cache/`, `temp/` – создаются во время работы
 
-## Обзор
+## Установка
+1. Python 3.10+ и пакеты `tesseract-ocr`, `poppler` и др.
+2. `pip install -r requirements.txt`
+3. Скопируйте `.env-example` в `.env` и укажите `API_KEY` и `HTTP_PROXY` при необходимости
 
-Это сервис на FastAPI, который:
-
-- Принимает на вход PDF-файл (скан или документ).  
-- Преобразует каждую страницу в изображение, проводит OCR (текст, таблицы, формулы).  
-- Опционально — прогоняет результат через AI-модель от OpenAI (например, `o4-mini`) или вашу собственную кастомную модель по настраиваемому prompt’у.  
-- Собирает LaTeX-разметку по страницам и упаковывает всё в ZIP-архив с `.tex`-файлами.  
-
----
-
-## Структура проекта
-
-```
-
-.
-├── app/                    # Исходники сервиса
-│   ├── main.py             # Точка входа FastAPI
-│   ├── api/                # Определение HTTP-роутов
-│   └── converter/          # Логика конвертации
-│       ├── service.py      # Класс Converter + сохранение/загрузка
-│       ├── pipeline/       # Определение Pipeline и Stage’ов
-│       └── utils/          # Вспомогательные функции
-├── config/
-│   ├── application.yaml    # Основной YAML-конфиг пайплайна
-│   └── prompts/            # Шаблоны prompt’ов для AIExtractor
-├── cache/                  # Кеш извлечённых формул и др.
-│   └── formulas/           # Файлы кеша для FormulasExtractor
-├── downloads/              # Результирующие ZIP-архивы
-├── temp/                   # Временные файлы (изображения страниц и пр.)
-├── .env                    # Ваши переменные окружения
-├── .gitignore
-├── requirements.txt        # Python-зависимости
-└── README.md               # Эта документация
-
-````
-
----
-
-## Установка и зависимости
-
-1. **Клонируйте репозиторий** и перейдите в папку:
-   ```bash
-   git clone https://github.com/kr4cket/latex_converter
-   cd latex_converter
-    ```
-
-2. **Создайте виртуальное окружение** (Python 3.10+ желательно):
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-3. **Установите зависимости**:
-
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-4. **Системные зависимости** (по необходимости):
-
-   * **Tesseract OCR**:
-
-     ```bash
-     sudo apt-get install tesseract-ocr tesseract-ocr-rus
-     ```
-   * **Poppler/fitz**, **OpenCV**, **PIL**, **pdfplumber**, **PyPDF2** — через `pip`.
-   * **pix2tex** (LatexOCR) и **marker** (MarkerPDF) — через `requirements.txt`.
-
----
-
-## Конфигурация
-
-### Файл `config/application.yaml`
+## Настройка
+Все стадии и параметры описаны в `config/application.yaml`.
+Пример раздела `pipeline`:
 
 ```yaml
-# Шаблоны prompt’ов в config/prompts/
-prompts_dir: "config/prompts"
-
 pipeline:
   preprocessors:
     - name: ImagePreprocessor
       params:
-        directory: "temp/img"
+        directory: "img"
         output_prefix: "page_"
-    - name: PDFPreprocessor
-      params:
-        directory: "temp/pdf"
-        output_prefix: "page_"
-
   stages:
     - name: MarkerPdfTextExtractor
       params:
-        use_llm: false
-        output_format: "json"
         languages: "en,ru"
         force_ocr: true
-
-    - name: MarkerPdfTablesExtractor
-      params:
-        use_llm: false
-        output_format: "json"
-        languages: "en,ru"
-        force_ocr: true
-
-    - name: FormulasExtractor
-      params:
-        required_symbols: [ '\\', '{', '}', '_', '^' ]
-        math_keywords: [ "int", "sum", "lim", "alpha", "beta" ]
-        cache_dir: "cache/formulas"
-
-    - name: AIExtractor
-      params:
-        model: "o4-mini"             # OpenAI-модель
-        api_key: "${API_KEY}"        # из .env
-        proxies:
-          http: "${HTTP_PROXY}"      # опционально
-        text: "MarkerPdfTextExtractor" # ключ обработчика, который необходим для подстановки в промпт
-        tables: "MarkerPdfTablesExtractor" # ключ обработчика, который необходим для подстановки в промпт
-        formulas: "FormulasExtractor" # ключ обработчика, который необходим для подстановки в промпт
-
     - name: TexExporter
       params:
-        output_format: "zip"         
+        directory: "tex"
         output_prefix: "page_"
+        result_data_key: "AIExtractor"
 ```
 
-### Шаблоны prompt’ов (config/prompts)
+Путь к шаблонам (`prompts_dir`) и директории кеша также настраиваются здесь.
 
-Вся логика AIExtractor берет свои шаблоны из папки `config/prompts/`.
-
-* **Где хранятся**
-  Файлы лежат в `config/prompts/` рядом с `application.yaml`.
-
-Все шаблоны prompt’ов для моделей (в данной реализации **AIExtractor**) называются в точности так же, как ваши модели (а не по типам «text», «tables», «formulas»).
-
-  Каталог:  
-```
-    config/
-    └── prompts/
-    ├──── o4-mini.json
-    ├──── custom-v1.json
-    └──── my-model.json
+## Запуск сервера
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
----
+### API
+- `POST /api/v1/convert` – принять PDF и вернуть ссылку на скачивание
+- `GET /api/v1/convert/{id}` – отдать ZIP‑архив с `.tex`‑страницами
 
-### Примеры настроек для разных стадий
-
-* **ImagePreprocessor**
-  - directory — куда сохранять PNG-изображения
-  - output_prefix — префикс имени файла
-
-* **MarkerPdfTextExtractor / MarkerPdfTablesExtractor**
-  - use_llm — включить LLM-проверку (true/false)
-  - output_format — формат вывода (json, text)
-  - languages — языки для OCR (en,ru)
-  - force_ocr — принудительно запускать OCR, даже при наличии встроенного текста
-
-* **FormulasExtractor**
-  - required_symbols — символы, характерные для формул
-  - math_keywords — слова-ключи (int, sum, lim и др.)
-  - cache_dir — папка для кеширования распознанных формул
-
-* **AIExtractor**
-  - model — название модели (локальная o4-mini или OpenAI)
-  - api_key, proxies — доступ к OpenAI API
-  - text, tables, formulas — имена prompt-файлов из config/prompts
-
-* **TexExporter**
-  - directory — выводная папка для .tex
-  - output_prefix — префикс имени страницы
-  - result_data_key — из какого ключа брать LaTeX-код
-
----
-
-### Добавление собственных обработчиков
-
-1. Наследуйте базовый класс `Stage`:
-
-   ```python
-   from app.converter.stage.stage import Stage
-
-   class CustomStage(Stage):
-       def __init__(self, foo: str, bar: int):
-           self.foo = foo
-           self.bar = bar
-
-       def process(self, page_data: dict) -> Any:
-           # ваша логика
-           return result
-   ```
-2. Зарегистрируйте в `app/converter/stage/container.py`:
-
-   ```python
-   CLASS_MAP["CustomStage"] = "app.converter.pipeline.my_module"
-   ```
-3. Добавьте в `application.yaml`:
-
-   ```yaml
-   pipeline:
-     stages:
-       - name: CustomStage
-         params:
-           foo: "value"
-           bar: 123
-   ```
-
----
-
-### Переменные окружения и файл `.env`
-
-Переименуйте `.env-example` в **`.env`** и укажите:
-
-```dotenv
-API_KEY=<ваш_ключ_OpenAI>
-HTTP_PROXY=http://proxy:3128
+### CLI
+```bash
+python process_pdf.py path/to/file.pdf
 ```
 
-Переменные можно вставлять в `application.yaml` через `${VARNAME}`.
-
----
-
-## Архитектура и Pipeline
-
-```python
-class Stage(ABC):
-    @abstractmethod
-    def process(self, data: dict) -> Any: ...
-    def get_name(self) -> str: return self.__class__.__name__
-
-pipeline = Pipeline()
-pipeline.set_file_path("document.pdf")
-pages_data = pipeline.prepare()  # препроцессоры → изображения/страницы
-pages_data = pipeline.run()      # stages → OCR/AI/форматирование
-```
-
----
-
-## API – FastAPI
-
-**POST** `/api/v1/convert`
-
-* Принимает `file` (multipart/form-data) — PDF
-* Возвращает **201**:
-
-  ```json
-  {
-    "description": "Data converted!",
-    "download_url": "/api/v1/convert/<file_id>"
-  }
-  ```
-
-**GET** `/api/v1/convert/{file_id}`
-
-* Возвращает ZIP-архив (`application/zip`) с готовыми `.tex`-файлами
-
-Ошибки: `500 Internal Server Error`
-
----
-
-## Запуск и пример использования
+### Веб‑клиент
+В папке `front/` есть простой клиент. Запустите его любым HTTP‑сервером:
 
 ```bash
-uvicorn app.main:app --reload --host localhost --port 8080 --timeout-keep-alive 7200
-
-# Конвертация
-curl -F "file=@document.pdf" http://localhost:8000/api/v1/convert
-
-# Скачивание результата
-curl http://localhost:8000/api/v1/convert/<file_id> --output result.zip
+cd front
+python -m http.server 8000
 ```
 
----
+Базовый URL API задаётся через параметр `apiBase` в строке запроса, например `index.html?apiBase=http://localhost:8000`.
 
-## Очистка и временные файлы
+## Очистка
+Временные файлы хранятся в `temp/`, результаты – в `downloads/`. Метод `Converter.cleanup()` удаляет временные каталоги, но готовые архивы остаются.
 
-* `temp/` хранит промежуточные изображения и PDF.
-* `Converter.cleanup()` удаляет временные папки и файлы.
-* Финальные ZIP-архивы в `downloads/` **не удаляются** автоматически.
-
----
-
-## Кеш и директория `cache/`
-
-* `FormulasExtractor` кеширует результаты в `cache/formulas/`.
-* Путь кеша можно настроить через `cache_dir` в `application.yaml`.
+## Расширение
+Создайте класс‑наследник `Stage`, зарегистрируйте его в `CLASS_MAP` (`app/converter/stage/container.py`) и добавьте в `application.yaml`.
 
 ---
-
-## Результирующий ZIP-архив
-
-После конвертации получаете единственный ZIP-файл в папке `downloads/`, внутри которого для каждой страницы лежит соответствующий `.tex`-файл:
-
-```
-downloads/
-└── <file_id>.zip
-    ├── page_1.tex
-    ├── page_2.tex
-    └── …
-```
-
----
-
-> **Гибкость и расширяемость**
-> Модульная структура позволяет подключать любые OCR-движки, модели OpenAI и кастомные LLM, свои шаблоны prompt’ов и добавлять новые стадии без изменения ядра.
-
-**Удачной конвертации!**
-
-
+Сервис адаптируем к различным OCR и LLM, что позволяет собирать собственные пайплайны конвертации.

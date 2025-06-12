@@ -5,6 +5,8 @@ const statusDiv = document.getElementById('status');
 const errorDiv = document.getElementById('error');
 const downloadLink = document.getElementById('download-link');
 
+const apiBase = new URLSearchParams(window.location.search).get('apiBase') || '';
+
 let selectedFile = null;
 
 fileInput.addEventListener('change', (e) => {
@@ -31,7 +33,7 @@ convertBtn.addEventListener('click', async () => {
     try {
         console.log('[convertBtn] Отправка файла:', selectedFile.name);
         // 1. Загрузка PDF
-        const uploadResponse = await fetch('http://77.234.216.102:17625/tatneft/api/v1/convert', {
+        const uploadResponse = await fetch(`${apiBase}/api/v1/convert`, {
             method: 'POST',
             body: formData,
         });
@@ -56,7 +58,7 @@ convertBtn.addEventListener('click', async () => {
         statusDiv.textContent = 'Конвертация...';
 
         // 2. Скачивание ZIP
-        const resultUrl = `http://77.234.216.102:17625/tatneft/api/v1/convert/${convertId}`;
+        const resultUrl = `${apiBase}/api/v1/convert/${convertId}`;
         console.log('[convertBtn] resultUrl:', resultUrl);
         const zipResponse = await fetch(resultUrl);
         console.log('[convertBtn] zipResponse status:', zipResponse.status);
